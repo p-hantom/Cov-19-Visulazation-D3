@@ -1,0 +1,281 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<style>
+    .line{
+        fill: none;
+        stroke: darkred;
+    }
+</style>
+</head>
+<script src="https://d3js.org/d3.v5.min.js"></script>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+
+<body>
+    <h1>Cov-19</h1>
+    <div class="mainView container">
+        <div class="row">
+            <div class="col-xl-6">
+                <h2 class="row">Confirmed</h2>
+                <svg id="confirmedChart" class="row"></svg>
+            </div>
+            <div class="col-xl-6">
+                <h2 class="row">Deaths And Recovered</h2>
+                <svg id="deathAndRevoveredChart" class="row"></svg>
+            </div>
+        </div>
+        <div class="row">
+            <h2 class="row">Confirmed - Time Series</h2>
+            <svg id="confirmedTimeChart" class="row"></svg>
+        </div>
+    </div>
+</body>
+
+<script>
+    let store = {}
+    function loadData(){
+        return Promise.all([
+            d3.csv('time_series_covid_19_confirmed.csv')
+        ]).then(datasets => {
+            store.confirmed = datasets[0];
+            return store;
+        })
+    }
+
+    loadData().then(showData);
+
+    function showData(){
+        // console.log(store.confirmed);
+        let c = store.confirmed;
+        let confirmedByCtry = totalConfirmedByCtry(c);
+        let showConfirmed = confirmedByCtry.slice(0,10);
+        // console.log(confirmedByCtry)
+
+        //---------draw confirmed bar chart
+        drawConfirmedChart(showConfirmed);
+
+        
+        let x = timeSeriesConfirmed('China', c);
+        drawTimeSeries(x);
+    }
+
+    function totalConfirmedByCtry(data){
+        let result = data.reduce((r, d)=>{
+            let curData = r[d['Country/Region']] || {
+                "country": d['Country/Region'],
+                "count": 0
+            }
+
+            curData.count += +d['3/20/20'];  //----to be modified, not the latest
+            r[d['Country/Region']] = curData;
+
+            return r;
+        },{})
+
+        //convert the dictionary into a list
+        result = Object.keys(result).map(key => result[key]);
+        result.sort((a,b) => d3.descending(a.count, b.count));
+        return result;
+    }
+
+    //bar chart: config
+    function getConfirmedChartConfig(){
+        let width = 360;
+        let height = 400;
+        let margin = {
+            top: 10,
+            bottom: 50,
+            left: 100,
+            right: 10
+        }
+
+        //The body is the are that will be occupied by the bars.
+        let bodyHeight = height - margin.top - margin.bottom
+        let bodyWidth = width - margin.left - margin.right
+
+        let container = d3.select('#confirmedChart')
+            .attr("width", width)
+            .attr('height', height)
+        
+        return { width, height, margin, bodyHeight, bodyWidth, container }
+    }
+
+    //bar chart: scales
+    function getConfirmedChartScales(data, config){
+        let maxCount = d3.max(data, d => d.count);
+        
+        let xScale = d3.scaleLinear()
+            .domain([0, maxCount])
+            .range([0, config.bodyWidth])
+            .nice()
+        
+        let yScale = d3.scaleBand()
+            .domain(data.map(d => {
+                return d.country;
+            }))
+            .range([0, config.bodyHeight])
+            .padding(0.1)
+        
+        return {xScale, yScale};
+    }
+
+    //bar chart: draw axes
+    function drawAxesConfirmedChart(data, scales, config){
+        let {xScale, yScale} = scales;
+        let {container, margin, height} = config;
+        let axisX = d3.axisBottom(xScale)
+            .ticks(5)
+        
+        container.append('g')
+            .style('transform', `translate(${margin.left}px,${height-margin.bottom}px)`)
+            .call(axisX)
+        
+        let axisY = d3.axisLeft(yScale)
+
+        container.append('g')
+            .style('transform', `translate(${margin.left}px,${margin.top}px)`)
+            .call(axisY)
+    }
+
+    //bar chart: draw bars
+    function drawBarsConfirmedChart(data, scales, config){
+        let {margin, container} = config; // this is equivalent to 'let margin = config.margin; let container = config.container'
+        let {xScale, yScale} = scales;
+        let body = container.append("g")
+            .style("transform", 
+                `translate(${margin.left}px,${margin.top}px)`
+            )
+        let bars = body.selectAll('.bar')
+            .data(data)
+            .enter().append('rect')
+            .attr('height', yScale.bandwidth())
+            .attr('y', d => yScale(d.country))
+            .attr('width', d => xScale(d.count))
+            .attr("fill", "#2a5599")
+            .on('click', function(d){
+                d3.select('#confirmedChart').selectAll('rect').attr('fill', '#2a5599')
+                d3.select(this).attr('fill', 'darkred')
+                d3.select('#confirmedTimeChart').selectAll('*').remove()
+                drawTimeSeries(timeSeriesConfirmed(d.country, store.confirmed));
+            })
+    }
+
+    //bar chart: draw
+    function drawConfirmedChart(data){
+        let config = getConfirmedChartConfig();
+        let scales = getConfirmedChartScales(data, config);
+        drawAxesConfirmedChart(data, scales, config);
+        drawBarsConfirmedChart(data, scales, config);
+    }
+
+ //--------------------------------------------------------
+    // //line chart: config
+    // function getTimeChartConfig(){
+    //     let width = 1000;
+    //     let height = 350;
+    //     let margin = {
+    //         top: 10,
+    //         bottom: 50,
+    //         left: 100,
+    //         right: 10
+    //     }
+
+    //     //The body is the are that will be occupied by the bars.
+    //     let bodyHeight = height - margin.top - margin.bottom
+    //     let bodyWidth = width - margin.left - margin.right
+
+    //     let container = d3.select('#confirmedTimeChart')
+    //         .attr("width", width)
+    //         .attr('height', height)
+        
+    //     return { width, height, margin, bodyHeight, bodyWidth, container }
+    // }
+
+    // //format time for one denoted country(string)
+    // function timeSeriesConfirmed(country, data){
+    //     let result = data
+    //         .filter(d => d['Country/Region']===country)
+    //         .reduce((acc, d)=>{
+    //             let dList = Object.keys(d);
+    //             let numList = Object.values(d);
+    //             for(let i in dList){
+    //                 if(i>=4){
+    //                     let date = dList[i], num = numList[i];
+    //                     let parts = date.split("/");
+    //                     fdate = new Date(Number("20"+parts[2]), Number(parts[0]) - 1, Number(parts[1]));
+    //                     let curData = acc[fdate] || {
+    //                         'date': fdate,
+    //                         'num': 0
+    //                     }
+    //                     curData.num += +num;
+    //                     acc[fdate] = curData;
+    //                 }
+    //             }
+    //             return acc;
+    //         },{})
+        
+    //     result = Object.keys(result).map(key => result[key])
+    //     return result;
+    // }
+
+    // //line chart: scales
+    // function getTimeSeriesScales(data, config){
+    //     let xScale = d3.scaleTime()
+    //         .domain(d3.extent(data, d => d.date))
+    //         // .domain([data[0].date, data[data.length-1].date])
+    //         .range([0, config.bodyWidth])
+    //         .nice()
+        
+    //     let maxNum = data[data.length-1].num;
+    //     let yScale = d3.scaleLinear()
+    //         .range([config.bodyHeight, 0])
+    //         .domain([0, maxNum])
+    //         .nice()
+        
+    //     return {xScale, yScale};
+    // }
+
+    // function drawAxesTimeSeriesChart(data, scales, config){
+    //     let {xScale, yScale} = scales;
+    //     let {container, margin, height} = config;
+
+    //     let axisX = d3.axisBottom(xScale)
+    //     container.append('g')
+    //         .style('transform', `translate(${margin.left}px,${height-margin.bottom}px)`)
+    //         .call(axisX)
+        
+    //     let axisY = d3.axisLeft(yScale)
+    //     container.append('g')
+    //         .style('transform', `translate(${margin.left}px,${margin.top}px)`)
+    //         .call(axisY)
+            
+    // }
+
+    // function drawLinesTimeSeries(data, scales, config){
+    //     let {margin, container} = config; // this is equivalent to 'let margin = config.margin; let container = config.container'
+    //     let {xScale, yScale} = scales;
+    //     let body = container.append("g")
+    //         .style("transform", 
+    //             `translate(${margin.left}px,${margin.top}px)`
+    //         )
+        
+    //     let lineG = d3.line()
+    //         .x(d=> xScale(d.date))
+    //         .y(d=> yScale(d.num))
+        
+    //     body.append('path')
+    //         .datum(data)
+    //         .attr('d', lineG)
+    //         .attr('class', 'line')
+    // }
+
+    // function drawTimeSeries(data){
+    //     let config = getTimeChartConfig();
+    //     let scales = getTimeSeriesScales(data, config);
+    //     drawAxesTimeSeriesChart(data, scales, config);
+    //     drawLinesTimeSeries(data, scales, config)
+    // }
+
+</script>
+
+</html>
