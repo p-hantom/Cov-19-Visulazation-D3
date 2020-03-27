@@ -19,6 +19,10 @@
         fill: white;
         stroke: #000;
     }
+    #stackTooltip{
+        position: absolute;
+        display: none;
+    }
 </style>
 </head>
 <script src="https://d3js.org/d3.v5.min.js"></script>
@@ -33,8 +37,9 @@
                 <svg id="confirmedChart" class="row"></svg>
             </div>
             <div class="col-xl-6">
-                <h2 class="row">Deaths And Recovered</h2>
-                <svg id="deathAndRevoveredChart" class="row"></svg>
+                <h2 class="row" id="stackTitle">Deaths And Recovered</h2>
+                <!-- <svg id="stackTooltip"></svg> -->
+                <svg id="stackedChart" class="row"></svg>
             </div>
         </div>
         <div class="row">
@@ -49,17 +54,42 @@
     let store = {}
     function loadData(){
         return Promise.all([
-            d3.csv('time_series_covid_19_confirmed.csv')
+            d3.csv('time_series_covid_19_confirmed.csv'),
+            d3.csv('time_series_covid_19_deaths.csv'),
+            d3.csv('time_series_covid_19_recovered.csv')
         ]).then(datasets => {
             store.confirmed = datasets[0];
+            store.deaths = datasets[1];
+            store.recovered = datasets[2];
             return store;
         })
+    }
+
+    function totalByCtry(data){
+        let result = data.reduce((r, d)=>{
+            let curData = r[d['Country/Region']] || {
+                "country": d['Country/Region'],
+                "count": 0
+            }
+
+            curData.count += +d['3/20/20'];  //----to be modified, not the latest
+            r[d['Country/Region']] = curData;
+
+            return r;
+        },{})
+
+        //convert the dictionary into a list
+        result = Object.keys(result).map(key => result[key]);
+        result.sort((a,b) => d3.descending(a.count, b.count));
+        return result;
     }
 
 </script>
 
 <script src="timeSeries.js"></script>
+<script src="stackedBar.js"></script>
 <script src="barsConfirmed.js"></script>
+
 
 <script>
 
@@ -67,16 +97,22 @@
     loadData().then(showData);
 
     function showData(){
-        // console.log(store.confirmed);
+        // console.log(store.deaths);
+        // console.log(store.recovered);
         let c = store.confirmed;
-        let confirmedByCtry = totalConfirmedByCtry(c);
-        let showConfirmed = confirmedByCtry.slice(0,10);
-        // console.log(confirmedByCtry)
+        store.confirmedByCtry = totalByCtry(c);
+        store.deathsByCtry = totalByCtry(store.deaths);
+        store.recoveredByCtry = totalByCtry(store.recovered);
+        
+        // console.log(recoveredByCtry)
 
-        //---------draw confirmed bar chart
+        drawStackChart('China')
+
+        //---------draw confirmed -bar- chart
+        let showConfirmed = store.confirmedByCtry.slice(0,10);
         drawConfirmedChart(showConfirmed);
 
-        
+        //---------draw time series -line- chart
         let x = timeSeriesConfirmed('China', c);
         drawTimeSeries(x, 'China');
     }

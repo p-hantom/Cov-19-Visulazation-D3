@@ -1,21 +1,4 @@
-function totalConfirmedByCtry(data){
-    let result = data.reduce((r, d)=>{
-        let curData = r[d['Country/Region']] || {
-            "country": d['Country/Region'],
-            "count": 0
-        }
 
-        curData.count += +d['3/20/20'];  //----to be modified, not the latest
-        r[d['Country/Region']] = curData;
-
-        return r;
-    },{})
-
-    //convert the dictionary into a list
-    result = Object.keys(result).map(key => result[key]);
-    result.sort((a,b) => d3.descending(a.count, b.count));
-    return result;
-}
 
 //bar chart: config
 function getConfirmedChartConfig(){
@@ -91,7 +74,12 @@ function drawBarsConfirmedChart(data, scales, config){
             d3.select('#confirmedChart').selectAll('rect').attr('fill', '#2a5599')
             d3.select(this).attr('fill', 'darkred')
             d3.select('#confirmedTimeChart').selectAll('*').remove()
+            d3.select('#stackedChart').selectAll('*').remove()
+            
+            drawStackChart(d.country)
+            
             drawTimeSeries(timeSeriesConfirmed(d.country, store.confirmed), d.country);
+            
         })
         //.on should not be written after transition, as there'd be confusion between transition.on() and others
     
